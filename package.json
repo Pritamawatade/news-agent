@@ -1,0 +1,28 @@
+{
+  "name": "ai-sdk",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun ./index.ts",
+    "loop": "bun ./index.ts loop",
+    "listen": "bun ./index.ts listen",
+    "dry": "bun ./index.ts --dry",
+    "test-telegram": "bun ./index.ts test-telegram",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^4.0.88",
+    "@ai-sdk/groq": "^4.0.55",
+    "@mendable/firecrawl-js": "^4.42.4",
+    "ai": "^7.0.128",
+    "dotenv": "^18.0.5",
+    "zod": "^4.6.5"
+  }
+}
