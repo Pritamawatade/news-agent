@@ -87,23 +87,130 @@ Multi-agent digest bot that fetches **major AI news only** (big model launches, 
 | Telegram | 1 message/cycle, only if news | No spam |
 | Free-tier fit | ~4 cycles/day × ~1k tokens | Well under Groq 1k req/day + 200k tok/day |
 
-## Setup
+---
 
-### 1. Keys
+## Setup (full walkthrough)
 
-| Key | Where |
-|---|---|
-| `GROQ_API_KEY` (`gsk_…`) | https://console.groq.com/home → API Keys |
-| `FIRECRAWL_API_KEY` (`fc-…`) | https://firecrawl.dev → API Keys |
-| `TELEGRAM_BOT_TOKEN` | Telegram → @BotFather → `/newbot` → message the new bot once |
-| `TELEGRAM_CHAT_ID` | Telegram → @userinfobot (numeric ID), or `https://api.telegram.org/bot<TOKEN>/getUpdates` after messaging your bot |
+You need **4 secrets**: `GROQ_API_KEY`, `FIRECRAWL_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`. Everything else has sane defaults. Total setup time: ~10 minutes. All providers have free tiers — no credit card required.
 
-### 2. Install + env
+### Providers used
+
+| Provider | Used for | Where to get the key | Free tier |
+|---|---|---|---|
+| **Groq** | LLM curation (`src/agent.ts` via `@ai-sdk/groq` + `ai` SDK) | https://console.groq.com → left sidebar **API Keys** → **Create API Key**, starts with `gsk_…` | 1,000 req/day, 200k tok/day, 30 req/min on `gpt-oss-20b` |
+| **Firecrawl** (`@mendable/firecrawl-js` v4) | Web **search** + article **scrape** (`src/firecrawl.ts`) | https://firecrawl.dev → **Sign in** → Dashboard → **API Keys**, starts with `fc-…` | ~500 credits free (search ≈ 1 credit, scrape ≈ 1–2 credits) |
+| **Telegram Bot API** | Digest delivery + `/whatsnew` commands (`src/telegram.ts`, `src/listener.ts`). No SDK — plain `fetch` to `api.telegram.org`. Free forever. | Telegram app → **@BotFather** (see step-by-step below) | Unlimited messages |
+
+> `@ai-sdk/google` is listed in `package.json` but not used by default — ignore it unless you want to swap the curator model to Gemini later.
+
+### 0. Prerequisites
 
 ```bash
+# 1. Install Bun (package manager + runtime for this project)
+curl -fsSL https://bun.sh/install | bash
+bun --version
+
+# 2. Clone + install deps
+git clone <your-repo-url> news-agent
+cd news-agent
 bun install
-cp .env.example .env   # then fill in the 4 keys
+
+# 3. Create your env file
+cp .env.example .env
 ```
+
+Bun auto-loads `.env` — no `dotenv` import needed.
+
+### 1. Get a Groq API key (LLM)
+
+1. Go to **https://console.groq.com/home** and sign in (Google/GitHub works).
+2. Left sidebar → **API Keys** → **Create API Key** → give it any name (e.g. `news-agent`).
+3. Copy the key — it starts with `gsk_…`. You only see it once.
+4. Paste into `.env`:
+   ```ini
+   GROQ_API_KEY=gsk_...
+   ```
+5. The default model is `openai/gpt-oss-20b` (set via `NEWS_LLM_MODEL`). Reason: Llama models are Enterprise-only on new Groq keys as of late 2025 — `gpt-oss-20b` works on every free key. Leave the default unless you know your key has access to another model.
+
+### 2. Get a Firecrawl API key (search + scrape)
+
+1. Go to **https://firecrawl.dev** → **Start for free** / **Sign in** → open the **Dashboard**.
+2. Go to **API Keys** (or **Settings → API Keys**) → **Create / Copy** key. It starts with `fc-…`.
+3. Paste into `.env`:
+   ```ini
+   FIRECRAWL_API_KEY=fc-...
+   ```
+4. What it powers:
+   - `searchAiNews()` — 3 queries per cycle (`QUERIES` in `src/firecrawl.ts`), `tbs=qdr:d2` = last 2 days only, `limit = NEWS_MAX_RESULTS`.
+   - `scrapeContents()` — max **5 pages/cycle**, 4000 chars each, 2 s gap (free tier is ~10 req/min). Login-walled sites (`instagram/facebook/tiktok/linkedin/reddit`) are skipped automatically and fall back to the search snippet.
+5. If you run out of free credits, either add billing or raise `NEWS_CHECK_INTERVAL_HOURS` / lower `NEWS_MAX_RESULTS` to slow consumption.
+
+### 3. Set up the Telegram bot (step-by-step)
+
+This is the part most people get stuck on, so here is every click:
+
+**a) Create the bot with @BotFather**
+
+1. Open **Telegram** (phone or desktop) and search for **`@BotFather`** (verified, blue check).
+2. Send `/newbot`.
+3. BotFather asks for a **display name** — this is the "share title" people see when you share/forward the bot (e.g. `AI News Agent`). You can use spaces and emoji. You can change it later with `/setname`.
+4. BotFather asks for a **username** — must be globally unique and end in `bot` (e.g. `my_ai_news_42bot`). This becomes the link `t.me/my_ai_news_42bot`.
+5. BotFather replies with your **bot token**, looking like:
+   ```
+   123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+   ```
+   Paste it into `.env`:
+   ```ini
+   TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+   ```
+   ⚠️ Treat the token like a password — anyone with it controls your bot. If it leaks, send `/revoke` to BotFather.
+
+Optional BotFather polish (all via chat with `@BotFather`):
+- `/setdescription` — short bio shown on the bot profile.
+- `/setabouttext` — one-liner.
+- `/setcommands` — register command hints so Telegram shows them in the menu:
+  ```
+  whatsnew - fetch fresh AI news right now
+  start - show help
+  ```
+
+**b) Activate the bot (required!)**
+
+1. Open your bot's link `t.me/<your_bot_username>` → press **Start**, or just send any message (e.g. `hi`).
+2. Until you do this, Telegram blocks the bot from messaging you (`400 Bad Request: chat not found`).
+
+**c) Get your Telegram Chat ID (`TELEGRAM_CHAT_ID`)**
+
+The bot is **private** — `src/listener.ts` only answers the chat ID in your `.env` and replies `🔒 Sorry, this is a private bot.` to everyone else. So this must be *your* numeric ID (or your group's ID).
+
+Pick **one** method:
+
+| Method | Steps |
+|---|---|
+| **A. @userinfobot (easiest)** | Search `@userinfobot` → **Start** → it replies with `Your ID: 123456789`. Copy that number. |
+| **B. getUpdates URL** | Message your bot first (step b), then open in a browser: `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` (replace `<YOUR_TOKEN>`). Look for `"chat":{"id":123456789,…}`. That number is your chat ID. |
+| **C. Group chat** | Add your bot to the group → send `/start@<your_bot_username>` in the group → open the `getUpdates` URL above → the group's `chat.id` will be **negative** (e.g. `-123456789`). Use that negative number. Also send `/setprivacy` → **Disable** to BotFather if you want the bot to see group commands. |
+
+Then in `.env`:
+```ini
+TELEGRAM_CHAT_ID=123456789
+```
+
+**d) Verify Telegram works**
+
+```bash
+bun run test-telegram
+```
+
+You should get `✅ AI News agent connected!` in Telegram within seconds. If not, see the Telegram rows in [Troubleshooting](#troubleshooting).
+
+**e) How chatting with the bot works**
+
+- `/whatsnew` (or plain `what's new`) — runs the full pipeline immediately and replies with a digest (only works while `bun run listen` is running).
+- `/start` — help text (`HELP_TEXT` in `src/listener.ts`).
+- Any other chat ID gets the "private bot" rejection — change `TELEGRAM_CHAT_ID` to move ownership.
+
+### 4. Fill in `.env` (reference)
 
 `.env` (Bun auto-loads it, no dotenv import needed):
 
@@ -119,7 +226,18 @@ NEWS_LLM_MODEL=openai/gpt-oss-20b
 NEWS_DB_PATH=./news.db
 ```
 
-### 3. Scripts
+| Variable | Required | Default | What it does |
+|---|---|---|---|
+| `GROQ_API_KEY` | yes | — | LLM curation. From https://console.groq.com → API Keys |
+| `FIRECRAWL_API_KEY` | yes | — | Search + scrape. From https://firecrawl.dev dashboard |
+| `TELEGRAM_BOT_TOKEN` | yes (unless `--dry`) | — | From @BotFather → `/newbot`. Format `digits:alphanumeric` |
+| `TELEGRAM_CHAT_ID` | yes (unless `--dry`) | — | Your numeric user ID (@userinfobot) or negative group ID |
+| `NEWS_CHECK_INTERVAL_HOURS` | no | `6` | Used by `loop` / `listen` modes. Don't go below `2` on free tiers |
+| `NEWS_MAX_RESULTS` | no | `8` | Firecrawl results per query (3 queries → up to 3×N candidates) |
+| `NEWS_LLM_MODEL` | no | `openai/gpt-oss-20b` | Any Groq-supported model ID your key can access |
+| `NEWS_DB_PATH` | no | `./news.db` | SQLite dedupe memory. Delete to resend everything |
+
+### 5. Run it
 
 ```bash
 bun run dry            # full pipeline, prints digest, sends nothing, DB untouched
@@ -131,6 +249,15 @@ bun run typecheck      # tsc --noEmit
 ```
 
 `bun run .` also works (defaults to single cycle).
+
+Order for first run:
+
+```bash
+bun run test-telegram  # 1. prove Telegram works
+bun run dry            # 2. prove search+scrape+LLM works (no side effects)
+bun run start          # 3. real send
+bun run listen         # 4. leave running for auto-digest + /whatsnew
+```
 
 On Telegram, message your bot:
 - `/whatsnew` (or plain `what's new`) — runs the full fetch → verify → digest workflow immediately (requires `listen` mode running)
@@ -156,11 +283,13 @@ No webhooks, no open ports — Telegram long-polling is outbound HTTPS only.
 | `Missing env: …` | `.env` incomplete — compare with `.env.example` |
 | `model_not_found` from Groq | Key lacks model access — run `NEWS_LLM_MODEL=openai/gpt-oss-20b` (default) |
 | `429 Too Many Requests` | Hit Groq/Firecrawl quota — raise interval, lower `NEWS_MAX_RESULTS` |
-| `Telegram send failed: 400` | Wrong `TELEGRAM_CHAT_ID` (must message the bot first) or token typo |
-| `401 Unauthorized` (Telegram) | Bad `TELEGRAM_BOT_TOKEN` |
+| `Telegram send failed: 400` / `chat not found` | You didn't message the bot first (step 3b), or wrong `TELEGRAM_CHAT_ID`. Redo step 3b–3c. Group IDs must be negative |
+| `401 Unauthorized` (Telegram) | Bad `TELEGRAM_BOT_TOKEN` — re-copy from @BotFather, check for trailing spaces/newlines |
+| Bot replies `🔒 Sorry, this is a private bot.` | You're messaging from a different Telegram account than `TELEGRAM_CHAT_ID`. Update the env var to the ID you're testing from |
 | Same news repeating | `news.db` deleted? Don't delete it — it's the dedupe memory |
 | Never any news | Queries too narrow or all filtered — run `bun run dry` to see counts at each stage |
 | `test-telegram` works, `start` sends nothing | Normal — means no fresh authentic news this cycle |
+| `getUpdates` returns `{"ok":true,"result":[]}` | No messages yet — send a message to your bot first, then refresh the URL |
 
 ## Extending
 
