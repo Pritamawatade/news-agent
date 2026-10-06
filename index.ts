@@ -7,6 +7,27 @@ import { listenForCommands, HELP_TEXT } from "./src/listener.ts";
 
 const mode = process.argv[2] ?? "once"; // once | loop | listen | test-telegram
 
+// Dummy HTTP server so PaaS port scanners (Render/Railway/Fly web services)
+// see an open port. The bot itself uses outbound-only Telegram long-polling
+// and needs no inbound traffic — this endpoint only satisfies the platform
+// health check and keeps free-tier web services from being marked unhealthy.
+function startHealthServer() {
+  const port = Number(process.env.PORT ?? "10000");
+  try {
+    Bun.serve({
+      port,
+      hostname: "0.0.0.0",
+      routes: {
+        "/healthz": () => new Response("ok"),
+        "/": () => new Response("ai news agent running"),
+      },
+    });
+    console.log(`[health] listening on 0.0.0.0:${port} (/healthz)`);
+  } catch (e) {
+    console.error("[health] failed to bind port:", (e as Error).message);
+  }
+}
+
 async function runCycle(sendToTelegram: boolean, targetChatId = config.telegramChatId) {
   assertConfig(sendToTelegram);
   const db = getDb(config.dbPath);
@@ -92,12 +113,14 @@ if (mode === "test-telegram") {
   await sendTelegram(config.telegramBotToken, config.telegramChatId, "✅ <b>AI News agent connected!</b> Send /whatsnew anytime, or wait for the auto-digest.");
   console.log("Test message sent.");
 } else if (mode === "loop") {
+  startHealthServer();
   console.log(`[news] loop mode: every ${config.intervalHours}h. Ctrl+C to stop.`);
   await runCycle(true);
   setInterval(() => runCycle(true).catch((e) => console.error("[news] cycle error:", e.message)),
     config.intervalHours * 3600_000);
 } else if (mode === "listen") {
   // Cloud mode: auto-digest on interval + on-demand /whatsnew. Deploy this.
+  startHealthServer();
   assertConfig(true);
   console.log(`[news] listen mode: auto-digest every ${config.intervalHours}h + Telegram commands. Ctrl+C to stop.`);
   setInterval(() => runCycle(true).catch((e) => console.error("[news] cycle error:", e.message)),
