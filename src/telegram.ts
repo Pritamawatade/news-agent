@@ -6,11 +6,16 @@ function escapeHtml(s: string): string {
 
 export function formatDigest(items: CuratedNews[]): string {
   const date = new Date().toISOString().slice(0, 10);
-  const lines = [`<b>🤖 AI News Digest — ${date}</b>`, ""];
+  const lines = [`<b>🤖 Tech &amp; AI News Digest — ${date}</b>`, ""];
   const emoji: Record<string, string> = {
     model_launch: "🚀",
+    product_launch: "📦",
     funding_ipo: "💰",
+    acquisition_merger: "🤝",
+    leadership_change: "👤",
+    hiring_layoffs: "🧑‍💼",
     breakthrough: "🔬",
+    industry_report: "📊",
     other_major: "📰",
   };
   items.forEach((n, i) => {

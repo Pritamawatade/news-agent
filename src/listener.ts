@@ -54,8 +54,9 @@ export async function listenForCommands(
 }
 
 export const HELP_TEXT =
-  "🤖 <b>AI News Agent</b>\n\n" +
-  "/whatsnew — fetch fresh AI news right now\n" +
+  "🤖 <b>Tech &amp; AI News Agent</b>\n\n" +
+  "/whatsnew — fetch fresh tech news right now\n" +
   `Plus an automatic digest every ${process.env.NEWS_CHECK_INTERVAL_HOURS ?? "6"}h.\n\n` +
-  "I track model launches, funding/IPOs and breakthroughs — " +
+  "I track AI model & product launches, funding/IPOs, acquisitions & mergers, " +
+  "CEO changes, major hires & layoffs, breakthroughs and industry reports — " +
   "deduplicated and authenticity-scored before anything reaches you.";

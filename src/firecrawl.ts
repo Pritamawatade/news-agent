@@ -9,21 +9,28 @@ export interface RawNews {
 }
 
 // Broad authenticity filter layer 1 — LLM does layer 2 (content verification).
-// Trusted = official AI labs + major press + startup/VC press + social (X, etc.).
+// Trusted = official AI labs / big tech + major tech press + business/VC press
+// + social (X, etc.).
 const TRUSTED_DOMAINS = [
-  // AI labs & big tech (official blogs count as most authentic)
+  // AI labs & big tech (official blogs/newsrooms count as most authentic)
   "openai.com", "anthropic.com", "deepmind.google", "blog.google", "research.google",
-  "microsoft.com", "nvidia.com", "newsroom.ibm.com", "ibm.com", "meta.com",
-  "amazon.science", "aws.amazon.com", "x.ai", "mistral.ai", "cohere.com",
-  "stability.ai", "perplexity.ai", "together.ai", "fireworks.ai", "groq.com",
-  "huggingface.co",
-  // Major press
+  "about.google", "microsoft.com", "news.microsoft.com", "nvidia.com", "newsroom.ibm.com",
+  "ibm.com", "meta.com", "amazon.science", "aws.amazon.com", "x.ai", "mistral.ai",
+  "cohere.com", "stability.ai", "perplexity.ai", "together.ai", "fireworks.ai", "groq.com",
+  "huggingface.co", "apple.com", "newsroom.intel.com", "samsung.com", "qualcomm.com",
+  "arm.com", "broadcom.com", "oracle.com", "salesforce.com", "adobe.com",
+  // Major tech & business press
   "techcrunch.com", "theverge.com", "wired.com", "bloomberg.com",
   "reuters.com", "ft.com", "axios.com", "venturebeat.com",
   "theinformation.com", "arstechnica.com", "siliconangle.com",
   "theguardian.com", "nytimes.com", "washingtonpost.com", "wsj.com",
   "cnbc.com", "forbes.com", "fortune.com", "economist.com", "bbc.com",
   "sifted.eu", "techinasia.com", "crunchbase.com", "pitchbook.com",
+  "engadget.com", "cnet.com", "zdnet.com", "thenextweb.com", "techradar.com",
+  "theregister.com", "gizmodo.com", "businessinsider.com", "protocol.com",
+  "apnews.com", "marketwatch.com", "barrons.com", "seekingalpha.com",
+  // Official press-release wires (hires, layoffs, M&A announcements)
+  "prnewswire.com", "businesswire.com", "globenewswire.com",
   // Social / aggregators (Firecrawl often can't scrape these —
   // they flow through on search-snippet fallback instead)
   "x.com", "twitter.com", "reddit.com", "news.ycombinator.com", "linkedin.com",
@@ -44,10 +51,22 @@ export function isUnscrapable(url: string): boolean {
   }
 }
 
+// Each query costs ~1 Firecrawl search credit per cycle, so keep the list tight
+// but cover the whole tech-news surface: AI models, broader product launches,
+// money (funding/IPO/M&A), people (CEO/hires/layoffs), research and data reports.
 const QUERIES = [
-  "new large language model release AI",
-  "AI company IPO funding raised",
-  "major AI breakthrough advancement",
+  // AI model & major product launches
+  "new AI model release announcement",
+  "major tech product launch announcement",
+  // Money: funding, IPOs, acquisitions, mergers
+  "AI startup funding round IPO",
+  "technology company acquisition merger deal",
+  // People: leadership changes, major hires, layoffs
+  "technology company CEO change new chief executive",
+  "tech company executive hire layoffs job cuts",
+  // Research, policy and industry facts & figures
+  "major AI breakthrough research advancement",
+  "tech industry report survey data statistics",
 ];
 
 export function isTrusted(url: string): boolean {

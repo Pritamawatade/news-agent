@@ -7,7 +7,17 @@ const NewsItem = z.object({
   url: z.string(),
   headline: z.string(),
   summary: z.string().max(400),
-  category: z.enum(["model_launch", "funding_ipo", "breakthrough", "other_major"]),
+  category: z.enum([
+    "model_launch",
+    "product_launch",
+    "funding_ipo",
+    "acquisition_merger",
+    "leadership_change",
+    "hiring_layoffs",
+    "breakthrough",
+    "industry_report",
+    "other_major",
+  ]),
   authenticity: z.number().min(0).max(1),
 });
 
@@ -23,7 +33,7 @@ export interface CuratedNews {
 
 /**
  * SINGLE batched LLM call per run — not one call per article.
- * Filters hype/rumors, keeps only major AI news, writes Telegram-ready summaries.
+ * Filters hype/rumors, keeps only major tech/AI news, writes Telegram-ready summaries.
  */
 export async function curateWithAgent(
   model: string,
@@ -40,14 +50,16 @@ export async function curateWithAgent(
   const { object } = await generateObject({
     model: groq(model),
     schema: AgentOutput,
-    prompt: `You are an AI-news editor. From the candidates below, keep ONLY major, authentic AI news:
-- big model launches (OpenAI, Anthropic, Google, Meta, xAI, DeepSeek, Qwen, etc.)
-- AI company IPO / large funding rounds / acquisitions
-- major technical breakthroughs or policy shifts
+    prompt: `You are a technology-news editor. From the candidates below, keep ONLY major, authentic tech/AI news:
+- AI model launches and major product launches (OpenAI, Anthropic, Google, Meta, xAI, DeepSeek, Qwen, Apple, Microsoft, Nvidia, etc.)
+- funding rounds, IPOs, acquisitions and mergers
+- CEO/executive changes, major hires and layoffs
+- major technical breakthroughs, policy shifts and industry reports with concrete facts and figures
 
 REJECT: rumors without named source, opinion pieces, tutorials, minor updates, duplicates, SEO spam.
 Score authenticity 0-1 (source reputation + concrete facts + dates/numbers). Drop anything < 0.7.
 Write a 1-2 sentence neutral summary each. Max 8 items, most important first.
+Pick the best-fitting category for each item from the schema.
 
 Candidates:\n${batch}`,
   });
