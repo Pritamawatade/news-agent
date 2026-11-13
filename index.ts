@@ -19,7 +19,7 @@ function startHealthServer() {
       hostname: "0.0.0.0",
       routes: {
         "/healthz": () => new Response("ok"),
-        "/": () => new Response("ai news agent running"),
+        "/": () => new Response("tech news agent running"),
       },
     });
     console.log(`[health] listening on 0.0.0.0:${port} (/healthz)`);
@@ -110,7 +110,7 @@ async function runCycle(sendToTelegram: boolean, targetChatId = config.telegramC
 
 if (mode === "test-telegram") {
   assertConfig(true);
-  await sendTelegram(config.telegramBotToken, config.telegramChatId, "✅ <b>AI News agent connected!</b> Send /whatsnew anytime, or wait for the auto-digest.");
+  await sendTelegram(config.telegramBotToken, config.telegramChatId, "✅ <b>Tech &amp; AI News agent connected!</b> Send /whatsnew anytime, or wait for the auto-digest.");
   console.log("Test message sent.");
 } else if (mode === "loop") {
   startHealthServer();
@@ -133,7 +133,7 @@ if (mode === "test-telegram") {
     if (cmd === "start") {
       await sendTelegram(config.telegramBotToken, chatId, HELP_TEXT);
     } else {
-      await sendTelegram(config.telegramBotToken, chatId, "🔍 <b>Fetching fresh AI news…</b> give me a minute.");
+      await sendTelegram(config.telegramBotToken, chatId, "🔍 <b>Fetching fresh tech news…</b> give me a minute.");
       await runCycle(true, chatId).catch(async (e) => {
         await sendTelegram(config.telegramBotToken, chatId, `⚠️ Fetch failed: ${e.message}. Try again later.`);
       });

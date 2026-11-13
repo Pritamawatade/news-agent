@@ -1,12 +1,12 @@
-# 🤖 AI News Agent — Groq + Firecrawl + Telegram
+# 🤖 Tech News Agent — Groq + Firecrawl + Telegram
 
-Multi-agent digest bot that fetches **major AI news only** (big model launches, IPO / funding, breakthroughs), **verifies authenticity**, and sends **one scored Telegram digest per cycle** — plus on-demand `/whatsnew`. LLM, scraping and hosting all on free tiers.
+Multi-agent digest bot that fetches **major tech & AI news** (model and product launches, funding / IPOs, acquisitions & mergers, CEO changes, major hires & layoffs, breakthroughs, industry reports and facts & figures), **verifies authenticity**, and sends **one scored Telegram digest per cycle** — plus on-demand `/whatsnew`. LLM, scraping and hosting all on free tiers.
 
 ## Agents
 
 | Agent | Job | Powered by |
 |---|---|---|
-| **Fetcher** | Firecrawl search (3 queries, recent window only) | Firecrawl free tier |
+| **Fetcher** | Firecrawl search (8 queries, recent window only) | Firecrawl free tier |
 | **Verifier** | Trusted-domain check + single batched LLM judge, authenticity score 0–10, shown as ⭐/10 | Groq `gpt-oss-20b` free tier |
 | **Dedupe memory** | Exact URL match + same-story detection across outlets (SQLite) | `bun:sqlite`, zero API cost |
 | **Sender** | One digest message per cycle + `/whatsnew` on-demand replies | Telegram Bot API (free) |
@@ -20,8 +20,8 @@ Multi-agent digest bot that fetches **major AI news only** (big model launches, 
                   └──────┬───────┘
                          │ 1. search
               ┌──────────▼──────────┐
-              │ src/firecrawl.ts    │  3 queries, last-2-days only (tbs=qdr:d2)
-              │ Firecrawl search    │  trusted domains sorted first
+              │ src/firecrawl.ts    │  8 queries, last-2-days only (tbs=qdr:d2)
+              │ Firecrawl search    │  round-robin across queries, trusted first
               └──────────┬──────────┘
                          │ 2a. exact dedupe (URL hash)  2b. same-story dedupe
                          │     (Jaccard on headline keywords — catches
@@ -54,7 +54,7 @@ Multi-agent digest bot that fetches **major AI news only** (big model launches, 
 |---|---|
 | `index.ts` | Entry. Modes: `once` (default, sends), `--dry` (prints, no send, DB untouched), `loop` (repeat every N hours), `listen` (interval digest + `/whatsnew` commands — deploy this), `test-telegram` (ping) |
 | `src/config.ts` | Env loading + validation. Fails fast on missing keys |
-| `src/firecrawl.ts` | Search (3 queries), ~40 trusted domains, unscrapable skip-list, capped scraping with rate-limit gaps |
+| `src/firecrawl.ts` | Search (8 queries), ~75 trusted domains, round-robin topic mixing, unscrapable skip-list, capped scraping with rate-limit gaps |
 | `src/db.ts` | SQLite dedupe: exact `SHA256(url+title)` + same-story Jaccard (≥0.4) vs last 30 days, 30-day prune |
 | `src/agent.ts` | Single `generateObject` call: filter + categorize + summarize + authenticity score |
 | `src/telegram.ts` | HTML digest with ⭐x/10 scores (4096-char safe) + sender |
@@ -64,10 +64,10 @@ Multi-agent digest bot that fetches **major AI news only** (big model launches, 
 
 ### Data flow per cycle
 
-1. **Search** — 3 Firecrawl queries (`model release`, `IPO/funding`, `breakthrough`), `limit=NEWS_MAX_RESULTS`, recency `qdr:d2`.
+1. **Search** — 8 Firecrawl queries (`model launch`, `product launch`, `funding/IPO`, `acquisition/merger`, `CEO change`, `hires/layoffs`, `breakthrough`, `industry report`), `limit=NEWS_MAX_RESULTS`, recency `qdr:d2`.
 2. **Dedupe** — `newsId = sha256(url + normalizedTitle)`. If seen → skip. This runs *before* scraping/LLM, so repeats cost zero tokens.
 3. **Scrape** — only fresh URLs, max 10 pages, truncated to 4000 chars. Unscrapable URLs are dropped.
-4. **Curate (1 LLM call)** — whole batch in one `groq(openai/gpt-oss-20b)` structured-output call. Keeps ≤8 items, categories `model_launch | funding_ipo | breakthrough | other_major`, drops `authenticity < 0.7`.
+4. **Curate (1 LLM call)** — whole batch in one `groq(openai/gpt-oss-20b)` structured-output call. Keeps ≤8 items, categories `model_launch | product_launch | funding_ipo | acquisition_merger | leadership_change | hiring_layoffs | breakthrough | industry_report | other_major`, drops `authenticity < 0.7`.
 5. **Send / skip** — all processed URLs marked seen (even rejects, so they're never retried). If curated list is empty → no Telegram message. Else one digest.
 
 ### Authenticity (2 layers)
@@ -141,7 +141,7 @@ Bun auto-loads `.env` — no `dotenv` import needed.
    FIRECRAWL_API_KEY=fc-...
    ```
 4. What it powers:
-   - `searchAiNews()` — 3 queries per cycle (`QUERIES` in `src/firecrawl.ts`), `tbs=qdr:d2` = last 2 days only, `limit = NEWS_MAX_RESULTS`.
+   - `searchAiNews()` — 8 queries per cycle (`QUERIES` in `src/firecrawl.ts`), `tbs=qdr:d2` = last 2 days only, `limit = NEWS_MAX_RESULTS`. Results are interleaved across queries so no single topic monopolises the per-cycle cap.
    - `scrapeContents()` — max **5 pages/cycle**, 4000 chars each, 2 s gap (free tier is ~10 req/min). Login-walled sites (`instagram/facebook/tiktok/linkedin/reddit`) are skipped automatically and fall back to the search snippet.
 5. If you run out of free credits, either add billing or raise `NEWS_CHECK_INTERVAL_HOURS` / lower `NEWS_MAX_RESULTS` to slow consumption.
 
@@ -153,7 +153,7 @@ This is the part most people get stuck on, so here is every click:
 
 1. Open **Telegram** (phone or desktop) and search for **`@BotFather`** (verified, blue check).
 2. Send `/newbot`.
-3. BotFather asks for a **display name** — this is the "share title" people see when you share/forward the bot (e.g. `AI News Agent`). You can use spaces and emoji. You can change it later with `/setname`.
+3. BotFather asks for a **display name** — this is the "share title" people see when you share/forward the bot (e.g. `Tech News Agent`). You can use spaces and emoji. You can change it later with `/setname`.
 4. BotFather asks for a **username** — must be globally unique and end in `bot` (e.g. `my_ai_news_42bot`). This becomes the link `t.me/my_ai_news_42bot`.
 5. BotFather replies with your **bot token**, looking like:
    ```
@@ -170,7 +170,7 @@ Optional BotFather polish (all via chat with `@BotFather`):
 - `/setabouttext` — one-liner.
 - `/setcommands` — register command hints so Telegram shows them in the menu:
   ```
-  whatsnew - fetch fresh AI news right now
+  whatsnew - fetch fresh tech news right now
   start - show help
   ```
 
@@ -202,7 +202,7 @@ TELEGRAM_CHAT_ID=123456789
 bun run test-telegram
 ```
 
-You should get `✅ AI News agent connected!` in Telegram within seconds. If not, see the Telegram rows in [Troubleshooting](#troubleshooting).
+You should get `✅ Tech & AI News agent connected!` in Telegram within seconds. If not, see the Telegram rows in [Troubleshooting](#troubleshooting).
 
 **e) How chatting with the bot works**
 
@@ -233,7 +233,7 @@ NEWS_DB_PATH=./news.db
 | `TELEGRAM_BOT_TOKEN` | yes (unless `--dry`) | — | From @BotFather → `/newbot`. Format `digits:alphanumeric` |
 | `TELEGRAM_CHAT_ID` | yes (unless `--dry`) | — | Your numeric user ID (@userinfobot) or negative group ID |
 | `NEWS_CHECK_INTERVAL_HOURS` | no | `6` | Used by `loop` / `listen` modes. Don't go below `2` on free tiers |
-| `NEWS_MAX_RESULTS` | no | `8` | Firecrawl results per query (3 queries → up to 3×N candidates) |
+| `NEWS_MAX_RESULTS` | no | `8` | Firecrawl results per query (8 queries → up to 8×N candidates) |
 | `NEWS_LLM_MODEL` | no | `openai/gpt-oss-20b` | Any Groq-supported model ID your key can access |
 | `NEWS_DB_PATH` | no | `./news.db` | SQLite dedupe memory. Delete to resend everything |
 
