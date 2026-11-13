@@ -80,9 +80,10 @@ export function isTrusted(url: string): boolean {
 
 export async function searchAiNews(apiKey: string, maxResults: number): Promise<RawNews[]> {
   const client = new Firecrawl({ apiKey });
-  const all: RawNews[] = [];
+  const buckets: RawNews[][] = [];
 
   for (const query of QUERIES) {
+    const bucket: RawNews[] = [];
     try {
       const res: any = await client.search(query, {
         limit: maxResults,
@@ -93,7 +94,7 @@ export async function searchAiNews(apiKey: string, maxResults: number): Promise<
       const items = [...(res?.web ?? []), ...(res?.news ?? [])];
       for (const item of items) {
         if (!item?.url || !item?.title) continue;
-        all.push({
+        bucket.push({
           url: item.url,
           title: item.title,
           snippet: item.description ?? item.snippet ?? "",
@@ -105,13 +106,23 @@ export async function searchAiNews(apiKey: string, maxResults: number): Promise<
     } catch (err) {
       console.error(`[firecrawl] search failed for "${query}":`, (err as Error).message);
     }
+    buckets.push(bucket);
   }
 
-  // Dedupe by URL, prefer trusted sources
+  // Round-robin across queries before applying the global cap. Without this,
+  // the first few queries fill the cap and later topics (CEO changes, layoffs,
+  // M&A, reports) never reach scraping/LLM even though they were fetched.
   const byUrl = new Map<string, RawNews>();
-  for (const n of all) {
-    if (!byUrl.has(n.url)) byUrl.set(n.url, n);
+  const maxLen = Math.max(0, ...buckets.map((b) => b.length));
+  for (let i = 0; i < maxLen; i++) {
+    for (const bucket of buckets) {
+      const n = bucket[i];
+      if (!n || byUrl.has(n.url)) continue;
+      byUrl.set(n.url, n);
+    }
   }
+
+  // Dedupe by URL, prefer trusted sources, then apply the same per-cycle cap.
   return [...byUrl.values()]
     .sort((a, b) => Number(isTrusted(b.url)) - Number(isTrusted(a.url)))
     .slice(0, maxResults * 2);

@@ -21,7 +21,7 @@ Multi-agent digest bot that fetches **major tech & AI news** (model and product 
                          │ 1. search
               ┌──────────▼──────────┐
               │ src/firecrawl.ts    │  8 queries, last-2-days only (tbs=qdr:d2)
-              │ Firecrawl search    │  trusted domains sorted first
+              │ Firecrawl search    │  round-robin across queries, trusted first
               └──────────┬──────────┘
                          │ 2a. exact dedupe (URL hash)  2b. same-story dedupe
                          │     (Jaccard on headline keywords — catches
@@ -54,7 +54,7 @@ Multi-agent digest bot that fetches **major tech & AI news** (model and product 
 |---|---|
 | `index.ts` | Entry. Modes: `once` (default, sends), `--dry` (prints, no send, DB untouched), `loop` (repeat every N hours), `listen` (interval digest + `/whatsnew` commands — deploy this), `test-telegram` (ping) |
 | `src/config.ts` | Env loading + validation. Fails fast on missing keys |
-| `src/firecrawl.ts` | Search (8 queries), ~60 trusted domains, unscrapable skip-list, capped scraping with rate-limit gaps |
+| `src/firecrawl.ts` | Search (8 queries), ~75 trusted domains, round-robin topic mixing, unscrapable skip-list, capped scraping with rate-limit gaps |
 | `src/db.ts` | SQLite dedupe: exact `SHA256(url+title)` + same-story Jaccard (≥0.4) vs last 30 days, 30-day prune |
 | `src/agent.ts` | Single `generateObject` call: filter + categorize + summarize + authenticity score |
 | `src/telegram.ts` | HTML digest with ⭐x/10 scores (4096-char safe) + sender |
@@ -141,7 +141,7 @@ Bun auto-loads `.env` — no `dotenv` import needed.
    FIRECRAWL_API_KEY=fc-...
    ```
 4. What it powers:
-   - `searchAiNews()` — 8 queries per cycle (`QUERIES` in `src/firecrawl.ts`), `tbs=qdr:d2` = last 2 days only, `limit = NEWS_MAX_RESULTS`.
+   - `searchAiNews()` — 8 queries per cycle (`QUERIES` in `src/firecrawl.ts`), `tbs=qdr:d2` = last 2 days only, `limit = NEWS_MAX_RESULTS`. Results are interleaved across queries so no single topic monopolises the per-cycle cap.
    - `scrapeContents()` — max **5 pages/cycle**, 4000 chars each, 2 s gap (free tier is ~10 req/min). Login-walled sites (`instagram/facebook/tiktok/linkedin/reddit`) are skipped automatically and fall back to the search snippet.
 5. If you run out of free credits, either add billing or raise `NEWS_CHECK_INTERVAL_HOURS` / lower `NEWS_MAX_RESULTS` to slow consumption.
 
